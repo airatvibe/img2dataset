@@ -2,7 +2,7 @@
 
 from multiprocessing.pool import ThreadPool
 from threading import Semaphore
-import urllib.request
+import urllib
 import io
 import math
 import exifread
@@ -35,27 +35,26 @@ def is_disallowed(headers, user_agent_token, disallowed_header_directives):
 
 
 def download_image(row, timeout, user_agent_token, disallowed_header_directives):
-    """Download an image with urllib"""
+    """Download an image with urllib, supporting redirects"""
     key, url = row
     img_stream = None
     user_agent_string = "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:72.0) Gecko/20100101 Firefox/72.0"
     if user_agent_token:
         user_agent_string += f" (compatible; {user_agent_token}; +https://github.com/rom1504/img2dataset)"
+    
     try:
         request = urllib.request.Request(url, data=None, headers={"User-Agent": user_agent_string})
-        with urllib.request.urlopen(request, timeout=timeout) as r:
+        opener = urllib.request.build_opener()
+        opener.addheaders = [("User-Agent", user_agent_string)]
+        opener.addheaders.append(('Accept', '*/*'))  # Handling common redirect headers
+
+        with opener.open(request, timeout=timeout) as r:
             if disallowed_header_directives and is_disallowed(
                 r.headers,
                 user_agent_token,
                 disallowed_header_directives,
             ):
-                return key, None, "Use of image disallowed by X-Robots-Tag directive"
-            img_stream = io.BytesIO(r.read())
-        return key, img_stream, None
-    except Exception as err:  # pylint: disable=broad-except
-        if img_stream is not None:
-            img_stream.close()
-        return key, None, str(err)
+                return key, None, "Usage error by custom X-robots-Pol"
 
 
 def download_image_with_retry(row, timeout, retries, user_agent_token, disallowed_header_directives):
